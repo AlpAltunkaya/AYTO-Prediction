@@ -2,6 +2,9 @@ from tqdm import tqdm  # Import the tqdm library
 import itertools
 import pickle
 from itertools import combinations
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 # Specifies whether the matches should be loaded from the match file
 # For the first few times you run, make sure this is set to False.
