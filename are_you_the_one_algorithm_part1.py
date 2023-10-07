@@ -17,7 +17,7 @@ allWeeks = [
     ([('Darya', 'Danilo'), ('Sandra', 'Paco'), ('Paulina', 'Steffen'), ('Shakira', 'Marvin'), ('Kim', 'Mike'), ('Sabrina', 'Emanuell'), ('Jennifer', 'Elia'), ('Marie', 'Fabio'), ('Steffi', 'Teezy'), ('Alicia', 'Max')], 3),
     ([('Mike', 'Sabrina'), ('Danilo', 'Paulina'), ('Paco', 'Kim'), ('Steffen', 'Alicia'), ('Marvin', 'Jennifer'), ('Teezy', 'Steffi'), ('Emanuell', 'Darya'), ('Fabio', 'Marie'), ('Max', 'Shakira'), ('Elia', 'Sandra')], 2),
     ([('Alicia', 'Steffen'), ('Sabrina', 'Max'), ('Sandra', 'Paco'), ('Shakira', 'Fabio'), ('Marie', 'Elia'), ('Darya', 'Danilo'), ('Steffi', 'Marvin'), ('Paulina', 'Mike'), ('Kim', 'Teezy'), ('Jennifer', 'Emanuell')], 2),
-    ([('Steffen', 'Sandra'), ('Max', 'Paulina'), ('Elia', 'Marie'), ('Danilo', 'Darya'), ('Fabio', 'Shakira'), ('Paco', 'Sabrina'), ('Max', 'Kim'), ('Emanuell', 'Steffi'), ('Marvin', 'Jennifer'), ('Teezy', 'Alicia')], 4),
+    ([('Steffen', 'Sandra'), ('Max', 'Paulina'), ('Elia', 'Marie'), ('Danilo', 'Darya'), ('Fabio', 'Shakira'), ('Paco', 'Sabrina'), ('Peter', 'Kim'), ('Emanuell', 'Steffi'), ('Marvin', 'Jennifer'), ('Teezy', 'Alicia')], 4),
     ([('Emanuell', 'Sabrina'), ('Paco', 'Shakira'), ('Mike', 'Paulina'), ('Teezy', 'Kim'), ('Marvin', 'Jennifer'), ('Max', 'Sandra'), ('Steffen', 'Alicia'), ('Fabio', 'Marie'), ('Elia', 'Steffi'), ('Danilo', 'Darya')], 3),
     ([('Paco', 'Alicia'), ('Steffen', 'Sandra'), ('Mike', 'Paulina'), ('Marvin', 'Jennifer'), ('Fabio', 'Shakira'), ('Elia', 'Marie'), ('Max', 'Sabrina'), ('Emanuell', 'Steffi'), ('Teezy', 'Kim'), ('Danilo', 'Darya')], 4),
     ([('Alicia', 'Fabio'), ('Jennifer', 'Paco'), ('Kim', 'Teezy'), ('Marie', 'Steffen'), ('Paulina', 'Marvin'), ('Sabrina', 'Emanuell'), ('Sandra', 'Mike'), ('Shakira', 'Max'), ('Steffi', 'Elia'), ('Danilo', 'Darya')], 3)
@@ -41,42 +41,63 @@ def correlation(list1, list2):
 
 # Returns whether a matchlist breaks a rule
 def isImpossible(matchlist):
+    matchlist_tuples = list(zip(men, matchlist))  # Convert to list of tuples for comparison
+
     for match in truthBooth_denied:
-        if match in matchlist:
+        if match in matchlist_tuples:
             return True
     for match in truthBooth_confirmed:
-        if match not in matchlist:
+        if match not in matchlist_tuples:
             return True
     for week in allWeeks:
-        if correlation(matchlist, week[0]) != week[1]:
+        if correlation(matchlist_tuples, week[0]) != week[1]:
             return True        
     return False
+
+# Remove Danilo and Darya from the list
+reduced_men = [m for m in men if m != 'Danilo']
+reduced_women = [w for w in women if w != 'Darya']
 
 # List of possible matches
 possible = []
 
-# Generate all possible matches using permutations
-iterable = combinations(women, len(women))  # We need permutations here because the men and women lists are distinct
+# Generate all possible matches using permutations for the reduced lists
+iterable = itertools.product(reduced_women, repeat=len(reduced_men))
 for matching in iterable:
-    matchlist = list(zip(men, matching))  # Create tuples for each match
+    matchlist = list(zip(reduced_men, matching))  # Create tuples for each match
+    matchlist.append(('Danilo', 'Darya'))  # Add back the known perfect match
     # Skip match lists that break a rule
     if isImpossible(matchlist):
         continue
     else:
         possible.append(matchlist)
 
-# Initialize dictionary to hold match probabilities
-match_dictionary = {}
-for guy in men:
-    match_dictionary[guy] = [0] * len(women)
+# Initialize dictionary to hold match probabilities for the reduced men list
+reduced_match_dictionary = {guy: [0] * len(reduced_women) for guy in reduced_men}
+reduced_match_dictionary['Danilo'] = [0] * len(women)  # Add Danilo back in
 
 # Calculate probabilities
 for matching in possible:
-    for guy in men:
-        match_dictionary[guy][women.index(matching[men.index(guy)])] += float(1)/len(possible)
+    for guy in reduced_men:
+        reduced_match_dictionary[guy][reduced_women.index(matching[reduced_men.index(guy)])] += float(1)/len(possible)
+
 
 # The rest of the code can include calculations and visualizations based on match_dictionary,
 # such as finding the most likely matches, plotting the probabilities, etc.
 
 # Save the possible matches into a file for future use
-pickle.dump(possible, open("allmatches.p", "wb"))
+print("Possible matchings:")
+for match in possible:
+    print(match)
+    
+    
+# Generate all possible matches using permutations
+iterable = combinations(women, len(women))  # We need permutations here because the men and women lists are distinct
+for matching in iterable:
+    matchlist = list(zip(men, matching))  # Create tuples for each match
+    # Skip match lists that break a rule
+    if isImpossible(matchlist):
+        print(f"Discarded matchlist: {matchlist}")  # Debug line to see which matchlist is being discarded
+        continue
+    else:
+        possible.append(matchlist)
