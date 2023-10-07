@@ -1,4 +1,4 @@
-
+from tqdm import tqdm  # Import the tqdm library
 import itertools
 import pickle
 from itertools import combinations
@@ -63,7 +63,10 @@ possible = []
 
 # Generate all possible matches using permutations for the reduced lists
 iterable = itertools.product(reduced_women, repeat=len(reduced_men))
-for matching in iterable:
+total_iterations = len(reduced_women) ** len(reduced_men)  # Calculate the total number of iterations
+
+# Wrap the iterable with tqdm for a progress bar
+for matching in tqdm(iterable, total=total_iterations):
     matchlist = list(zip(reduced_men, matching))  # Create tuples for each match
     matchlist.append(('Danilo', 'Darya'))  # Add back the known perfect match
     # Skip match lists that break a rule
