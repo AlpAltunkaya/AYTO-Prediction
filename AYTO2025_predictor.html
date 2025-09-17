@@ -179,7 +179,22 @@ function exportState(){
     alert('Export failed: ' + e.message);
   }
 }
-async function importState(file){ const txt=await file.text(); state = JSON.parse(txt); renderAll(); saveState(); }
+async function importState(file){
+  try{
+    const txt = await file.text();
+    const data = JSON.parse(txt);
+    if(!data || !Array.isArray(data.nights) || !Array.isArray(data.tbs)){
+      throw new Error('File is missing "nights" or "tbs" arrays');
+    }
+    validateInputs(data.nights, data.tbs);
+    state = data;
+    renderAll();
+    saveState();
+  }catch(err){
+    console.error('Import failed', err);
+    alert('Import failed: ' + (err?.message || err));
+  }
+}
 
 // ======= UI Builders =======
 let state = loadState();
@@ -328,10 +343,25 @@ function solveExact(nights, tbs, onProgress){
   const solutions=[]; let nodes=0; const t0=performance.now();
   function beamsOkPrefix(kCount){
     for(let idx=0; idx<nights.length; idx++){
-      const arr = nightMaps[idx]; const need = nights[idx].beams;
-      let fixedHits=0; for(let t=0;t<kCount;t++){ const i = menOrder[t]; const j=assign[i]; if(j!==-1 && arr[i]!==-1 && arr[i]===j) fixedHits++; }
-      let remainingContrib = 0; for(let t=kCount;t<menOrder.length;t++){ if(arr[menOrder[t]]!==-1) remainingContrib++; }
-      if(need < fixedHits || need > fixedHits + remainingContrib) return false;
+      const arr = nightMaps[idx];
+      const need = nights[idx].beams;
+      let hits = 0;
+      for(let t=0;t<kCount;t++){
+        const man = menOrder[t];
+        const woman = assign[man];
+        if(woman!==-1 && arr[man]!==-1 && arr[man]===woman) hits++;
+      }
+      if(hits>need) return false;
+      let potential = 0;
+      for(let t=kCount;t<menOrder.length;t++){
+        const man = menOrder[t];
+        const target = arr[man];
+        if(target===-1) continue;
+        if(usedW[target]) continue;
+        if(!A[man][target]) continue;
+        potential++;
+      }
+      if(hits + potential < need) return false;
     }
     return true;
   }
@@ -355,7 +385,9 @@ function solveExact(nights, tbs, onProgress){
       usedW[j]=false; assign[i]=-1;
     }
   }
-  if(beamsOkPrefix([...assign].filter(x=>x!==-1).length)) backtrack([...assign].filter(x=>x!==-1).length);
+  let startPos = 0;
+  while(startPos<menOrder.length && assign[menOrder[startPos]]!==-1) startPos++;
+  if(beamsOkPrefix(startPos)) backtrack(startPos);
   const marg = Array.from({length:n},()=>Array(n).fill(0));
   for(const s of solutions){ for(let i=0;i<n;i++){ marg[i][s[i]] += 1; } }
   if(solutions.length){ for(let i=0;i<n;i++){ for(let j=0;j<n;j++){ marg[i][j] /= solutions.length; } } }
@@ -395,6 +427,7 @@ function renderResults(res){
   const tblF = document.getElementById('tblFull');
   tblF.innerHTML = '';
   let k = Math.max(1, Math.min(50, +document.getElementById('kInput').value||10));
+  document.getElementById('kInput').value = k;
   if(!solutions.length){ tblF.innerHTML='<tr><td class="muted">No feasible solutions under current constraints.</td></tr>'; return; }
   const order = rankSolutionsByMarginals(solutions, marginals);
   const solsSorted = order.slice(0,k).map(i=>solutions[i]);
@@ -425,9 +458,21 @@ function solve(){
   const onProgress = ({nodes, solutions, elapsed})=>{ nodesEl.textContent=nodes.toLocaleString(); solsEl.textContent=solutions.toLocaleString(); const pct = Math.min(100, 5 + Math.log10(1+nodes)/4*95); barEl.style.width = pct+'%'; };
   try{
     const res = solveExact(state.nights, state.tbs, onProgress);
-    if(res.reason){ statusEl.innerHTML = `<span class="bad">${res.reason}</span>`; renderResults({solutions:[], marginals:[]}); return; }
-    statusEl.innerHTML = `<span class="good">done</span>`; renderResults(res);
-  }catch(e){ statusEl.innerHTML = `<span class="bad">${e.message}</span>`; }
+    if(res.reason){
+      statusEl.innerHTML = `<span class="bad">${res.reason}</span>`;
+      renderResults({solutions:[], marginals:[]});
+      return;
+    }
+    barEl.style.width='100%';
+    if(res.solutions.length){
+      statusEl.innerHTML = `<span class="good">done — ${res.solutions.length.toLocaleString()} solutions</span>`;
+    }else{
+      statusEl.innerHTML = `<span class="bad">No feasible solutions under current constraints</span>`;
+    }
+    renderResults(res);
+  }catch(e){
+    statusEl.innerHTML = `<span class="bad">${e.message}</span>`;
+  }
 }
 
 document.getElementById('btnSolve').onclick = solve;
