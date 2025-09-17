@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AYTO VIP 2025 — Interactive Solver</title>
+<style>
+  :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --accent:#60a5fa; --good:#22c55e; --bad:#ef4444; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif}
+  header{padding:16px 20px;border-bottom:1px solid #1f2937;display:flex;gap:16px;align-items:center;justify-content:space-between}
+  header h1{font-size:18px;margin:0}
+  .wrap{display:grid;grid-template-columns:320px 1fr;height:calc(100% - 57px)}
+  aside{border-right:1px solid #1f2937;overflow:auto}
+  main{overflow:auto}
+  section{padding:16px 20px;border-bottom:1px solid #1f2937}
+  h2{margin:0 0 8px 0;font-size:16px}
+  h3{margin:10px 0 6px 0;font-size:14px;color:var(--muted)}
+  .panel{background:var(--panel);border:1px solid #1f2937;border-radius:10px;padding:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  label{font-size:12px;color:var(--muted)}
+  input,select,button,textarea{background:#0b1220;color:var(--ink);border:1px solid #1f2937;border-radius:8px;padding:8px}
+  input[type="number"]{width:80px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{border-bottom:1px solid #1f2937;padding:6px 8px;text-align:left}
+  th{color:#cbd5e1;background:#0b1220;position:sticky;top:0}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #1f2937;background:#0b1220;color:#cbd5e1}
+  .kbd{font-family:ui-monospace, Menlo, Monaco, Consolas, monospace;background:#0b1220;border:1px solid #1f2937;border-radius:6px;padding:2px 6px}
+  .muted{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px}
+  .grid3{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:12px}
+  .good{color:var(--good)}
+  .bad{color:var(--bad)}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace}
+  .progress{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;border:1px solid #1f2937}
+  .progress>div{height:100%;background:var(--accent);width:0%}
+  details>summary{cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>AYTO VIP 2025 — Interactive Solver</h1>
+  <div class="controls">
+    <button id="btnSolve">Solve</button>
+    <button id="btnExport">Export JSON</button>
+    <label class="pill" for="fileImport">Import JSON</label>
+    <input id="fileImport" type="file" accept="application/json" style="display:none" />
+    <button id="btnReset">Reset to Current Data</button>
+  </div>
+  <a id="downloadAnchor" style="display:none"></a>
+</header>
+<div class="wrap">
+  <aside>
+    <section>
+      <h2>Rosters</h2>
+      <div class="panel">
+        <div><strong>Men</strong></div>
+        <div id="menList" class="mono muted"></div>
+        <div style="height:8px"></div>
+        <div><strong>Women</strong></div>
+        <div id="womenList" class="mono muted"></div>
+        <p class="muted">Note: <span class="kbd">SIT</span> is the dummy placeholder to keep the matrix square. It never contributes to beams.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Truth Booths</h2>
+      <div id="tbList"></div>
+      <div class="panel">
+        <div class="row">
+          <select id="tbMan"></select>
+          <span>×</span>
+          <select id="tbWoman"></select>
+          <select id="tbResult">
+            <option value="PM">PM</option>
+            <option value="NM">NM</option>
+          </select>
+          <button id="btnAddTB">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Matching Nights</h2>
+      <div id="nightList"></div>
+      <div class="panel">
+        <div class="row">
+          <button id="btnAddNight">Add Night</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <main>
+    <section>
+      <h2>Progress</h2>
+      <div class="panel">
+        <div class="row"><div class="muted">Status:</div> <div id="status">idle</div></div>
+        <div class="row"><div class="muted">Explored nodes:</div> <div id="nodes" class="mono">0</div> <div class="muted">Solutions:</div> <div id="solutions" class="mono">0</div></div>
+        <div class="progress"><div id="bar"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Results</h2>
+      <div class="grid">
+        <div class="panel">
+          <h3>Top-k Full Matchings (sorted by score)</h3>
+          <div class="row muted">k = <input id="kInput" type="number" value="10" min="1" max="50"/></div>
+          <table id="tblFull"></table>
+        </div>
+        <div class="panel">
+          <h3>Top-3 per Man (posterior)</h3>
+          <table id="tblTop3"></table>
+        </div>
+      </div>
+      <div style="height:12px"></div>
+      <div class="panel">
+        <h3>Truth Booth candidates by expected information gain</h3>
+        <table id="tblVOI"></table>
+      </div>
+      <div style="height:12px"></div>
+      <details class="panel">
+        <summary>Debug / Self-tests</summary>
+        <button id="btnTests">Run tests</button>
+        <pre id="testOut" class="mono muted"></pre>
+      </details>
+    </section>
+  </main>
+</div>
+
+<script>
+// ======= Data (normalized spellings) =======
+const MEN = ['Calvin O.', 'Calvin S.', 'Kevin', 'Leandro', 'Lennert', 'Nico', 'Olli', 'Rob', 'Sidar', 'Xander', 'Jonny'];
+const WOMEN = ['Antonia','Ariel','Beverly','Elli','Hati','Henna','Joanna','Nelly','Sandra','Viki','SIT'];
+const men_idx = Object.fromEntries(MEN.map((m,i)=>[m,i]));
+const women_idx = Object.fromEntries(WOMEN.map((w,i)=>[w,i]));
+
+// Default nights + TBs (current through MN3)
+function defaultState(){
+  return {
+    nights: [
+      { beams:2, seats:[
+        ['Leandro','Viki'],['Calvin O.','Hati'],['Jonny','Henna'],['Sidar','Nelly'],['Kevin','Sandra'],
+        ['Rob','Joanna'],['Nico','Ariel'],['Lennert','Antonia'],['Xander','Elli'],['Calvin S.','Beverly'],['Olli','SIT']
+      ]},
+      { beams:2, seats:[
+        ['Calvin S.','Joanna'],['Rob','Nelly'],['Kevin','Sandra'],['Nico','Ariel'],['Sidar','Beverly'],
+        ['Olli','Henna'],['Calvin O.','Hati'],['Leandro','Viki'],['Jonny','Antonia'],['Xander','Elli'],['Lennert','SIT']
+      ]},
+      { beams:2, seats:[
+        ['Calvin S.','Joanna'],['Olli','Antonia'],['Nico','Beverly'],['Calvin O.','Ariel'],['Rob','Hati'],
+        ['Leandro','Henna'],['Kevin','Sandra'],['Jonny','Viki'],['Lennert','Nelly'],['Sidar','SIT']
+      ]}
+    ],
+    tbs: [ {man:'Xander', woman:'Elli', result:'PM'}, {man:'Calvin S.', woman:'Nelly', result:'NM'} ]
+  };
+}
+
+const STORAGE_KEY = 'ayto_vip2025_state_v1';
+
+// ======= Persistence =======
+function loadState(){
+  try{ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ return JSON.parse(raw); } }catch(e){}
+  return defaultState();
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function exportState(){
+  try{
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.getElementById('downloadAnchor');
+    a.href = url;
+    a.download = 'ayto_vip2025_state.json';
+    a.click();
+    setTimeout(()=> URL.revokeObjectURL(url), 0);
+  }catch(e){
+    alert('Export failed: ' + e.message);
+  }
+}
+async function importState(file){ const txt=await file.text(); state = JSON.parse(txt); renderAll(); saveState(); }
+
+// ======= UI Builders =======
+let state = loadState();
+const menList = document.getElementById('menList');
+const womenList = document.getElementById('womenList');
+menList.textContent = MEN.join(', ');
+womenList.textContent = WOMEN.join(', ');
+
+function optionList(arr, value){ return arr.map(x=>`<option ${x===value?'selected':''}>${x}</option>`).join(''); }
+
+function renderTBs(){
+  const box = document.getElementById('tbList');
+  box.innerHTML = '';
+  state.tbs.forEach((tb, idx)=>{
+    const el = document.createElement('div'); el.className='panel';
+    el.innerHTML = `<div class=\"row\"><span class=\"mono\">${tb.man} × ${tb.woman}</span>
+      <span class=\"pill\">${tb.result}</span>
+      <button data-idx=\"${idx}\" class=\"btnDelTB\">Delete</button></div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('.btnDelTB').forEach(btn=>btn.onclick=(e)=>{ const i=+e.target.getAttribute('data-idx'); state.tbs.splice(i,1); renderTBs(); saveState(); });
+}
+
+function nightSeatRow(nightIdx, seatIdx, seat){
+  const [m,w] = seat;
+  return `<div class=\"row\" style=\"margin-top:6px\">
+    <select class=\"selMan\" data-night=\"${nightIdx}\" data-seat=\"${seatIdx}\">${optionList(MEN,m)}</select>
+    <span>→</span>
+    <select class=\"selWoman\" data-night=\"${nightIdx}\" data-seat=\"${seatIdx}\">${optionList(WOMEN,w)}</select>
+    <button class=\"btnDelSeat\" data-night=\"${nightIdx}\" data-seat=\"${seatIdx}\">Remove</button>
+  </div>`;
+}
+
+function renderNights(){
+  const box = document.getElementById('nightList');
+  box.innerHTML = '';
+  state.nights.forEach((night, ni)=>{
+    const el = document.createElement('div'); el.className='panel';
+    let seatsHtml = night.seats.map((s,si)=>nightSeatRow(ni,si,s)).join('');
+    el.innerHTML = `<div class=\"row\"><strong>Night ${ni+1}</strong><span class=\"muted\">&nbsp;Beams:</span>
+      <input class=\"inpBeams\" type=\"number\" min=\"0\" max=\"11\" value=\"${night.beams}\" data-night=\"${ni}\">
+      <button class=\"btnAddSeat\" data-night=\"${ni}\">Add Seat</button>
+      <button class=\"btnDelNight\" data-night=\"${ni}\">Delete Night</button>
+    </div>
+    ${seatsHtml}`;
+    box.appendChild(el);
+  });
+  // wires
+  box.querySelectorAll('.inpBeams').forEach(inp=>inp.onchange=(e)=>{ const ni=+e.target.getAttribute('data-night'); state.nights[ni].beams = +e.target.value; saveState(); });
+  box.querySelectorAll('.btnAddSeat').forEach(btn=>btn.onclick=(e)=>{ const ni=+e.target.getAttribute('data-night'); state.nights[ni].seats.push([MEN[0], WOMEN[0]]); renderNights(); saveState(); });
+  box.querySelectorAll('.btnDelNight').forEach(btn=>btn.onclick=(e)=>{ const ni=+e.target.getAttribute('data-night'); state.nights.splice(ni,1); renderNights(); saveState(); });
+  box.querySelectorAll('.selMan').forEach(sel=>sel.onchange=(e)=>{ const ni=+e.target.getAttribute('data-night'); const si=+e.target.getAttribute('data-seat'); state.nights[ni].seats[si][0]=e.target.value; saveState(); });
+  box.querySelectorAll('.selWoman').forEach(sel=>sel.onchange=(e)=>{ const ni=+e.target.getAttribute('data-night'); const si=+e.target.getAttribute('data-seat'); state.nights[ni].seats[si][1]=e.target.value; saveState(); });
+  box.querySelectorAll('.btnDelSeat').forEach(btn=>btn.onclick=(e)=>{ const ni=+e.target.getAttribute('data-night'); const si=+e.target.getAttribute('data-seat'); state.nights[ni].seats.splice(si,1); renderNights(); saveState(); });
+}
+
+// Add TB form
+(function initTBForm(){
+  const manSel = document.getElementById('tbMan');
+  const womanSel = document.getElementById('tbWoman');
+  manSel.innerHTML = optionList(MEN);
+  womanSel.innerHTML = optionList(WOMEN.filter(w=>w!=='SIT'));
+  document.getElementById('btnAddTB').onclick = ()=>{
+    const m = manSel.value; const w = womanSel.value; const r = document.getElementById('tbResult').value;
+    state.tbs.push({man:m, woman:w, result:r}); renderTBs(); saveState();
+  };
+})();
+
+// Add Night button
+(document.getElementById('btnAddNight').onclick = ()=>{ state.nights.push({beams:0, seats:[]}); renderNights(); saveState(); });
+
+// Export/Import/Reset
+(document.getElementById('btnExport').onclick = ()=>exportState());
+(document.getElementById('fileImport').onchange = (e)=>{ const f=e.target.files[0]; if(f) importState(f); });
+(document.getElementById('btnReset').onclick = ()=>{ state = defaultState(); renderAll(); saveState(); });
+
+function renderAll(){ renderTBs(); renderNights(); }
+renderAll();
+
+// ======= Solver (pure JS, mirrors Python fallback) =======
+function validateInputs(nights, tbs){
+  const menSet = new Set(MEN); const womenSet = new Set(WOMEN);
+  // seats names known
+  nights.forEach((night, idx)=>{
+    let sitM=0, sitW=0;
+    night.seats.forEach(([m,w])=>{
+      if(m!=='SIT' && !menSet.has(m)) throw new Error(`Unknown man '${m}' in MN${idx+1}`);
+      if(w!=='SIT' && !womenSet.has(w)) throw new Error(`Unknown woman '${w}' in MN${idx+1}`);
+      if(m==='SIT') sitM++; if(w==='SIT') sitW++;
+    });
+    if(sitM!==0 || !(sitW===0 || sitW===1)) throw new Error(`SIT handling inconsistent in MN${idx+1}`);
+  });
+  // TB names
+  tbs.forEach(tb=>{
+    if(!menSet.has(tb.man) || !womenSet.has(tb.woman)) throw new Error(`Unknown TB pair ${tb.man}×${tb.woman}`);
+    if(!(tb.result==='PM'||tb.result==='NM')) throw new Error(`TB result must be PM or NM`);
+  });
+}
+
+function tbContradictionReason(tbs){
+  const pmPairs=new Set(), nmPairs=new Set();
+  const pmMan=new Map(), pmWoman=new Map();
+  for(const tb of tbs){
+    const key = tb.man+'|'+tb.woman;
+    if(tb.result==='PM'){
+      if(nmPairs.has(key)) return `Contradiction: ${tb.man}×${tb.woman} is both PM and NM`;
+      if(pmMan.has(tb.man) && pmMan.get(tb.man)!==tb.woman) return `Contradiction: man ${tb.man} PM with both ${pmMan.get(tb.man)} and ${tb.woman}`;
+      if(pmWoman.has(tb.woman) && pmWoman.get(tb.woman)!==tb.man) return `Contradiction: woman ${tb.woman} PM with both ${pmWoman.get(tb.woman)} and ${tb.man}`;
+      pmPairs.add(key); pmMan.set(tb.man,tb.woman); pmWoman.set(tb.woman,tb.man);
+    }else{
+      if(pmPairs.has(key)) return `Contradiction: ${tb.man}×${tb.woman} is both PM and NM`;
+      nmPairs.add(key);
+    }
+  }
+  return null;
+}
+
+function solveExact(nights, tbs, onProgress){
+  validateInputs(nights, tbs);
+  const reason = tbContradictionReason(tbs); if(reason) return {solutions:[], marginals:null, reason};
+  const n = MEN.length;
+  const A = Array.from({length:n}, ()=>Array(n).fill(true));
+  const fixed = new Map();
+  for(const tb of tbs){
+    const i = men_idx[tb.man], j = women_idx[tb.woman];
+    if(tb.result==='NM') A[i][j] = false;
+  }
+  for(const tb of tbs){
+    if(tb.result==='PM'){
+      const i = men_idx[tb.man], j = women_idx[tb.woman];
+      fixed.set(i,j);
+      for(let c=0;c<n;c++){ A[i][c]=false; A[c][j]=false; } A[i][j]=true;
+    }
+  }
+  const nightMaps = nights.map(night=>{
+    const arr = Array(n).fill(-1);
+    for(const [m,w] of night.seats){ if(m==='SIT'||w==='SIT') continue; arr[men_idx[m]] = women_idx[w]; }
+    return arr;
+  });
+  const assign = Array(n).fill(-1); const usedW = Array(n).fill(false);
+  for(const [i,j] of fixed){ assign[i]=j; usedW[j]=true; }
+  const menOrder = [...Array(n).keys()].sort((i,k)=>{
+    const ai = A[i].reduce((s,v)=>s+(v?1:0),0), ak=A[k].reduce((s,v)=>s+(v?1:0),0);
+    const fi = fixed.has(i)?0:1, fk=fixed.has(k)?0:1; return fi-fk || ai-ak;
+  });
+  const solutions=[]; let nodes=0; const t0=performance.now();
+  function beamsOkPrefix(kCount){
+    for(let idx=0; idx<nights.length; idx++){
+      const arr = nightMaps[idx]; const need = nights[idx].beams;
+      let fixedHits=0; for(let t=0;t<kCount;t++){ const i = menOrder[t]; const j=assign[i]; if(j!==-1 && arr[i]!==-1 && arr[i]===j) fixedHits++; }
+      let remainingContrib = 0; for(let t=kCount;t<menOrder.length;t++){ if(arr[menOrder[t]]!==-1) remainingContrib++; }
+      if(need < fixedHits || need > fixedHits + remainingContrib) return false;
+    }
+    return true;
+  }
+  function backtrack(pos){
+    nodes++;
+    if(onProgress && (nodes%200===0)) onProgress({nodes, solutions:solutions.length, elapsed: (performance.now()-t0)/1000});
+    if(pos===MEN.length){
+      // verify beams
+      for(let ni=0; ni<nights.length; ni++){
+        const arr=nightMaps[ni]; let corr=0; for(let i=0;i<n;i++){ if(arr[i]!==-1 && assign[i]===arr[i]) corr++; }
+        if(corr!==nights[ni].beams) return;
+      }
+      solutions.push([...assign]); return;
+    }
+    const i = menOrder[pos];
+    if(assign[i]!==-1){ if(beamsOkPrefix(pos+1)) backtrack(pos+1); return; }
+    for(let j=0;j<n;j++){
+      if(!A[i][j]||usedW[j]) continue;
+      assign[i]=j; usedW[j]=true;
+      if(beamsOkPrefix(pos+1)) backtrack(pos+1);
+      usedW[j]=false; assign[i]=-1;
+    }
+  }
+  if(beamsOkPrefix([...assign].filter(x=>x!==-1).length)) backtrack([...assign].filter(x=>x!==-1).length);
+  const marg = Array.from({length:n},()=>Array(n).fill(0));
+  for(const s of solutions){ for(let i=0;i<n;i++){ marg[i][s[i]] += 1; } }
+  if(solutions.length){ for(let i=0;i<n;i++){ for(let j=0;j<n;j++){ marg[i][j] /= solutions.length; } } }
+  return {solutions, marginals:marg, nodes};
+}
+
+// Ranking + Reporting
+function rankSolutionsByMarginals(solutions, marg){
+  const n=MEN.length; const eps=1e-12; const scores = solutions.map((s,idx)=>{
+    let sc=0; for(let i=0;i<n;i++){ const j=s[i]; if(WOMEN[j]==='SIT') continue; const p=marg[i][j]; sc += Math.log(Math.max(p,eps)); } return [sc, idx];
+  });
+  scores.sort((a,b)=>b[0]-a[0]); return scores.map(x=>x[1]);
+}
+function extractPairs(sol){ const out={}; for(let i=0;i<MEN.length;i++){ out[MEN[i]] = WOMEN[sol[i]]; } return out; }
+function formatFull(m){ const sitter=Object.entries(m).find(([man,w])=>w==='SIT'); const sit = sitter?`Sitter: ${sitter[0]}`:'Sitter: (none)'; const pairs=Object.entries(m).filter(([_,w])=>w!=='SIT').map(([man,w])=>`${man}–${w}`).join(', '); return `${sit} | ${pairs}`; }
+function truthBoothVOI(solutions){ if(!solutions.length) return [];
+  const n=MEN.length; const N=solutions.length; const rows=[];
+  const count = Array.from({length:n},()=>Array(n).fill(0));
+  for(const s of solutions){ for(let i=0;i<n;i++){ count[i][s[i]]++; } }
+  const Hbefore = Math.log2(N);
+  for(let i=0;i<n;i++){
+    for(let j=0;j<n;j++){
+      if(WOMEN[j]==='SIT') continue; const y = count[i][j]; if(y===0||y===N) continue; const p=y/N; const Haf = p*Math.log2(y) + (1-p)*Math.log2(N-y); const info = Hbefore - Haf; rows.push({man:MEN[i], woman:WOMEN[j], P_yes: p, N_total:N, N_yes:y, N_no:N-y, Info_bits: info});
+    }
+  }
+  rows.sort((a,b)=> b.Info_bits - a.Info_bits || b.N_yes - a.N_yes ); return rows;
+}
+
+// ======= Wiring: run solver, update UI =======
+const statusEl = document.getElementById('status');
+const nodesEl = document.getElementById('nodes');
+const solsEl = document.getElementById('solutions');
+const barEl = document.getElementById('bar');
+
+function renderResults(res){
+  const {solutions, marginals} = res; const n=MEN.length;
+  const tblF = document.getElementById('tblFull');
+  tblF.innerHTML = '';
+  let k = Math.max(1, Math.min(50, +document.getElementById('kInput').value||10));
+  if(!solutions.length){ tblF.innerHTML='<tr><td class="muted">No feasible solutions under current constraints.</td></tr>'; return; }
+  const order = rankSolutionsByMarginals(solutions, marginals);
+  const solsSorted = order.slice(0,k).map(i=>solutions[i]);
+  const rows = solsSorted.map((s,idx)=>{ const m=extractPairs(s); return `<tr><td class=\"mono\">#${idx+1}</td><td>${formatFull(m)}</td></tr>`;}).join('');
+  tblF.innerHTML = `<tr><th>#</th><th>Matching</th></tr>${rows}`;
+
+  const tblT = document.getElementById('tblTop3');
+  const lines = [];
+  lines.push('<tr><th>Man</th><th>1st</th><th>2nd</th><th>3rd</th></tr>');
+  for(let i=0;i<n;i++){
+    const probs = marginals[i].map((p,j)=>({w:WOMEN[j], p})).filter(x=>x.w!=='SIT').sort((a,b)=>b.p-a.p).slice(0,3);
+    const cells = probs.map(x=>`${x.w} (${x.p.toFixed(3)})`);
+    lines.push(`<tr><td>${MEN[i]}</td><td>${cells[0]||''}</td><td>${cells[1]||''}</td><td>${cells[2]||''}</td></tr>`);
+  }
+  tblT.innerHTML = lines.join('');
+
+  const tblV = document.getElementById('tblVOI');
+  const voi = truthBoothVOI(solutions).slice(0,20);
+  if(!voi.length){ tblV.innerHTML = '<tr><td class="muted">No informative Truth-Booth candidates (all pairs are 0% or 100%).</td></tr>'; }
+  else{
+    tblV.innerHTML = '<tr><th>Man</th><th>Woman</th><th>P(yes)</th><th>Info (bits)</th><th>Yes</th><th>No</th><th>Total</th></tr>' +
+      voi.map(r=>`<tr><td>${r.man}</td><td>${r.woman}</td><td>${r.P_yes.toFixed(3)}</td><td>${r.Info_bits.toFixed(3)}</td><td>${r.N_yes}</td><td>${r.N_no}</td><td>${r.N_total}</td></tr>`).join('');
+  }
+}
+
+function solve(){
+  statusEl.textContent='solving…'; nodesEl.textContent='0'; solsEl.textContent='0'; barEl.style.width='0%';
+  const onProgress = ({nodes, solutions, elapsed})=>{ nodesEl.textContent=nodes.toLocaleString(); solsEl.textContent=solutions.toLocaleString(); const pct = Math.min(100, 5 + Math.log10(1+nodes)/4*95); barEl.style.width = pct+'%'; };
+  try{
+    const res = solveExact(state.nights, state.tbs, onProgress);
+    if(res.reason){ statusEl.innerHTML = `<span class="bad">${res.reason}</span>`; renderResults({solutions:[], marginals:[]}); return; }
+    statusEl.innerHTML = `<span class="good">done</span>`; renderResults(res);
+  }catch(e){ statusEl.innerHTML = `<span class="bad">${e.message}</span>`; }
+}
+
+document.getElementById('btnSolve').onclick = solve;
+
+// ======= Tests =======
+function runTests(){
+  const out=[]; function ok(cond,msg){ out.push((cond?'✅':'❌')+' '+msg); if(!cond) throw new Error(msg); }
+  // 1) validate & contradiction
+  ok(!tbContradictionReason(state.tbs), 'No contradiction in default TBs');
+  const contra = [...state.tbs, {man:'Xander', woman:'Elli', result:'NM'}];
+  ok(!!tbContradictionReason(contra), 'Detects PM∧NM contradiction');
+  // 2) solve
+  const r = solveExact(state.nights, state.tbs, null);
+  ok(r.solutions.length>=0, 'Solver returns array');
+  // 3) sitter count
+  if(r.solutions.length){
+    const sitCount = (sol)=> sol.map(j=>WOMEN[j]).filter(w=>w==='SIT').length;
+    ok(r.solutions.every(s=>sitCount(s)===1), 'Each solution has exactly one sitter');
+    // 4) marginals normalization
+    ok(r.marginals.every(row=> Math.abs(row.reduce((a,b)=>a+b,0)-1)<1e-9 ), 'Marginals rows sum to 1');
+  }
+  document.getElementById('testOut').textContent = out.join('\n');
+}
+
+document.getElementById('btnTests').onclick = runTests;
+
+</script>
+</body>
+</html>
